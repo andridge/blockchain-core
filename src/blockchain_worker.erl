@@ -112,7 +112,6 @@ spend(Recipient, Amount, Fee) ->
 spend(Recipient, Amount, Fee, Nonce) ->
     gen_server:cast(?SERVER, {spend, Recipient, Amount, Fee, Nonce}).
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @end

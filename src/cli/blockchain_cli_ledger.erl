@@ -21,6 +21,8 @@ register_all_usage() ->
                   end,
                   [
                    ledger_pay_usage(),
+                   ledger_sign_gateway_usage(),
+                   ledger_add_gateway_usage(),
                    ledger_create_htlc_usage(),
                    ledger_redeem_htlc_usage(),
                    ledger_balance_usage(),
@@ -35,6 +37,8 @@ register_all_cmds() ->
                   end,
                   [
                    ledger_pay_cmd(),
+                   ledger_sign_gateway_cmd(),
+                   ledger_add_gateway_cmd(),
                    ledger_create_htlc_cmd(),
                    ledger_redeem_htlc_cmd(),
                    ledger_balance_cmd(),
@@ -52,6 +56,8 @@ ledger_usage() ->
       "  ledger balance             - Get the balance for this or all addresses.\n"
       "  ledger export              - Export transactions from the ledger to <file>.\n"
       "  ledger pay                 - Transfer tokens to a crypto address.\n"
+      "  ledger sign_gateway        - Sign an add gateway transaction as the owner of a Gateway.\n"
+      "  ledger add_gateway         - Add a Gateway to the network.\n"
       "  ledger create_htlc         - Create or a hashed timelock address.\n"
       "  ledger redeem_htlc         - Redeem from a hashed timelock address.\n"
       "  ledger gateways            - Display the list of active gateways.\n"
@@ -76,7 +82,7 @@ ledger_pay_cmd() ->
 ledger_pay_usage() ->
     [["ledger", "pay"],
      ["ledger pay <address> <amount> <fee> [-n nonce]\n\n",
-      "  Transfer given <amount> to the target <address> with a <fee> for the miners.\n"
+      "  Transfer given <amount> to the target <address> with a <fee> for the miners (in data credits).\n"
      ]
     ].
 
@@ -97,6 +103,93 @@ ledger_pay(["ledger", "pay", Addr, Amount, F], [], Flags) ->
     end;
 ledger_pay(_, _, _) ->
     usage.
+
+%%--------------------------------------------------------------------
+%% ledger sign_gateway
+%%--------------------------------------------------------------------
+ledger_sign_gateway_cmd() ->
+    [
+     [["ledger", "sign_gateway"], '_', [
+                                       {gateway, [{shortname, "g"}, {longname, "gateway"}]},
+                                       {stake, [{shortname, "s"}, {longname, "stake"}]},
+                                       {fee, [{shortname, "f"}, {longname, "fee"}]}
+                                      ], fun ledger_sign_gateway/3]
+    ].
+
+ledger_sign_gateway_usage() ->
+    [["ledger", "sign_gateway"],
+     ["ledger sign_gateway\n\n",
+      "  Creates the first half of the transaction required to add a new Gateway to the Helium network. Requires a Gateway address, a stake (in Data Credits), and a transaction fee for the miners (in Data Credits). Returns a Base64 encoded transaction to be used as an input to either the Helium mobile application or the CLI ledger add_gateway command.\n"
+      "Required:\n\n"
+      "  -g, --gateway <address>\n",
+      "  The b58 address of the Gateway to be added.\n",
+      "  -s --stake <amount>\n",
+      "  The required stake for adding the Gateway, in data credits.\n"
+      "  -f --fee <fee>\n",
+      "  The fee for the miners, in data credits.\n"
+     ]
+    ].
+
+ledger_sign_gateway(_CmdBase, _, []) ->
+    usage;
+ledger_sign_gateway(_CmdBase, _Keys, Flags) ->
+    case (catch ledger_sign_gateway_helper(Flags)) of
+        {'EXIT', _Reason} ->
+            usage;
+        {ok, B64SignedOwnerAddGatewayTxn} ->
+            Text = io_lib:format("Signed Add Gateway Transaction: ~p", [B64SignedOwnerAddGatewayTxn]),
+            [clique_status:text(Text)];
+        _ -> usage
+    end.
+
+ledger_sign_gateway_helper(Flags) ->
+    Gateway = libp2p_crypto:b58_to_bin(clean(proplists:get_value(gateway, Flags))),
+    Stake = list_to_integer(clean(proplists:get_value(stake, Flags))),
+    Fee = list_to_integer(clean(proplists:get_value(fee, Flags))),
+    Swarm = blockchain_swarm:swarm(),
+    PubkeyBin = libp2p_swarm:pubkey_bin(Swarm),
+    {ok, _PubKey, OwnerSigFun, _ECDHFun} = libp2p_swarm:keys(Swarm),
+    AddGatewayTxn = blockchain_txn_add_gateway_v1:new(PubkeyBin, Gateway, Stake, Fee),
+    SignedOwnerAddGatewayTxn = blockchain_txn_add_gateway_v1:sign(AddGatewayTxn, OwnerSigFun),
+    {ok, base64:encode_to_string(blockchain_txn:serialize(SignedOwnerAddGatewayTxn))}.
+
+%%--------------------------------------------------------------------
+%% ledger add_gateway
+%%--------------------------------------------------------------------
+ledger_add_gateway_cmd() ->
+    [
+     [["ledger", "add_gateway"], '_', [
+                                       {transaction, [{shortname, "t"}, {longname, "transaction"}]}
+                                      ], fun ledger_add_gateway/3]
+    ].
+
+ledger_add_gateway_usage() ->
+    [["ledger", "add_gateway"],
+     ["ledger add_gateway\n\n",
+      "  Creates the second half of the transaction required to add a new Gateway to the Helium network. Requires a Base64 signed Add Gateway transaction as input (see ledger sign_gateway for information).\n"
+      "Required:\n\n"
+      "  -t, --transaction <base64>\n",
+      "  The base64 signed add gateway transcaction by the owner of this Gateway.\n\n"
+     ]
+    ].
+
+ledger_add_gateway(_CmdBase, _, []) ->
+    usage;
+ledger_add_gateway(_CmdBase, _Keys, Flags) ->
+    case (catch ledger_add_gateway_helper(Flags)) of
+        {'EXIT', _Reason} ->
+            usage;
+        ok ->
+            [clique_status:text("ok")];
+        _ -> usage
+    end.
+
+ledger_add_gateway_helper(Flags) ->
+    SignedOwnerAddGatewayTxn = blockchain_txn:deserialize(base64:decode(clean(proplists:get_value(transaction, Flags)))),
+    Swarm = blockchain_swarm:swarm(),
+    {ok, _PubKey, GatewaySigFun, _ECDHFun} = libp2p_swarm:keys(Swarm),
+    SignedGatewayAddGatewayTxn = blockchain_txn_add_gateway_v1:sign_request(SignedOwnerAddGatewayTxn, GatewaySigFun),
+    send_txn(SignedGatewayAddGatewayTxn).
 
 %%--------------------------------------------------------------------
 %% ledger create_htlc
@@ -126,7 +219,7 @@ ledger_create_htlc_usage() ->
       "  -t, --timelock <blockheight>\n",
       "  A specific blockheight after which the payer (you) can redeem their tokens\n",
       "  -f --fee <fee>\n",
-      "  The fee for the miners\n"
+      "  The fee for the miners, in data credits\n"
      ]
     ].
 
@@ -173,7 +266,7 @@ ledger_redeem_htlc_usage() ->
       "  -p --preimage <preimage>\n",
       "  The preimage used to create the Hashlock for this contract address\n",
       "  -f --fee <fee>\n",
-      "  The fee for the miners\n"
+      "  The fee for the miners, in data credits\n"
      ]
     ].
 
@@ -347,3 +440,14 @@ clean(String) ->
         [S] -> S;
         _ -> error
     end.
+
+send_txn(Txn) ->
+    ok = blockchain_txn_mgr:submit(Txn,
+                                   (fun(Res) ->
+                                            case Res of
+                                                ok ->
+                                                    lager:info("successfully submit txn: ~p", [Txn]);
+                                                {error, Reason} ->
+                                                    lager:error("failed to submit txn: ~p error: ~p", [Txn, Reason])
+                                            end
+                                    end)).

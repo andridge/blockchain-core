@@ -141,26 +141,42 @@ handle_info({blockchain_event, {new_chain, NC}}, State) ->
 handle_info({blockchain_event, {add_block, BlockHash, _Sync, _Ledger}}, State=#state{chain=Chain, txn_map=TxnMap}) ->
     case blockchain:get_block(BlockHash, Chain) of
         {ok, Block} ->
+            %% TODO: tidy this shit up,
+            %% get the txns included in the newly mined block
             Txns = blockchain_block:transactions(Block),
-            {_ValidTransactions, InvalidTransactions} =
-                blockchain_txn:validate(lists:usort(fun blockchain_txn:sort/2,
-                                                    maps:keys(TxnMap)), Chain),
 
+            %% generate a sorted list from the txnmap in our buffer
             SortedTxns = lists:sort(fun({TxnA, _}, {TxnB, _}) ->
                                             blockchain_txn:sort(TxnA, TxnB)
                                     end, maps:to_list(TxnMap)),
 
-            NewTxnMap = lists:foldl(fun({Txn, {Callback, Rejections, Dialer}}, Acc) ->
-                                            case {lists:member(Txn, Txns), lists:member(Txn, InvalidTransactions)} of
-                                                {true, _} ->
+            %% remove any txns which are included in the new block
+            PurgedTxnMap = lists:foldl(fun({Txn, {Callback, _Rejections, Dialer}}, Acc) ->
+                                            case lists:member(Txn, Txns) of
+                                                true ->
                                                     ok = blockchain_txn_mgr_sup:stop_dialer(Dialer),
                                                     invoke_callback(Callback, ok),
-                                                    maps:remove(Txn, Acc);
-                                                {_, true} ->
+                                                    maps:remove(Txn, Acc)
+                                            end
+                                    end,
+                                    TxnMap,
+                                    SortedTxns),
+
+            %% revalidate the new txn map
+            %% we do this after we have removed txns included in the new block
+            {_ValidTransactions, InvalidTransactions} =
+                blockchain_txn:validate(lists:usort(fun blockchain_txn:sort/2,
+                                                    maps:keys(PurgedTxnMap)), Chain),
+
+            %% fold over the txns again and remove any which failed validation
+            %% for the rest, start a new dialler
+            NewTxnMap = lists:foldl(fun({Txn, {Callback, Rejections, Dialer}}, Acc)->
+                                            case lists:member(Txn, InvalidTransactions) of
+                                                true ->
                                                     ok = blockchain_txn_mgr_sup:stop_dialer(Dialer),
                                                     invoke_callback(Callback, {error, invalid}),
                                                     maps:remove(Txn, Acc);
-                                                _ ->
+                                                false ->
                                                     %% Stop this dialer
                                                     lager:info("Rescheduling txn: ~p, stopping Dialer: ~p", [blockchain_txn:hash(Txn), Dialer]),
                                                     ok = blockchain_txn_mgr_sup:stop_dialer(Dialer),
@@ -170,11 +186,11 @@ handle_info({blockchain_event, {add_block, BlockHash, _Sync, _Ledger}}, State=#s
                                                     ok = blockchain_txn_dialer:dial(NewDialer),
                                                     maps:put(Txn, {Callback, Rejections, NewDialer}, Acc)
                                             end
-                                    end,
-                                    TxnMap,
-                                    SortedTxns),
+                                      end, PurgedTxnMap, maps:to_list(PurgedTxnMap)),
+
 
             {noreply, State#state{txn_map=NewTxnMap}};
+
         _ ->
             lager:error("WTF happened!"),
             {noreply, State}

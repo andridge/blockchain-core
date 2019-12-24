@@ -1515,6 +1515,11 @@ maybe_continue_resync(Blockchain, Blocking) ->
 resync_fun(ChainHeight, LedgerHeight, Blockchain) ->
     blockchain_lock:acquire(),
     case get_block(LedgerHeight, Blockchain) of
+        {error, _} when LedgerHeight == 0 ->
+            %% reload the genesis block
+            {ok, GenesisBlock} = blockchain:genesis_block(Blockchain),
+            ok = blockchain_txn:absorb_and_commit(GenesisBlock, Blockchain, fun() -> ok end),
+            resync_fun(Blockchain, LedgerHeight + 1, ChainHeight);
         {error, _} ->
             %% chain is missing the block the ledger is stuck at
             %% it is unclear what we should do here.
@@ -1553,7 +1558,6 @@ resync_fun(ChainHeight, LedgerHeight, Blockchain) ->
                     end
             end
     end.
-
 
 %% ------------------------------------------------------------------
 %% EUNIT Tests

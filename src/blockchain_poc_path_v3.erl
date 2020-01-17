@@ -288,8 +288,7 @@ filter_witnesses(GatewayLoc, Indices, Witnesses, Ledger, Vars) ->
                                 (GatewayParent /= WitnessParent) andalso
                                 %% Don't include any witness whose parent is too close to any of the indices we've already seen
                                 check_witness_distance(WitnessParent, ParentIndices, ExclusionCells) andalso
-                                check_witness_bad_rssi(Witness, Vars) andalso
-                                check_witness_bad_rssi_centrality(Witness, Vars)
+                                check_witness_bad_rssi(Witness, Vars)
                         end
                 end,
                 Witnesses).
@@ -339,62 +338,6 @@ check_witness_bad_rssi(Witness, Vars) ->
                 error:no_histogram ->
                     %% No histogram found, include
                     true
-            end;
-        _ ->
-            true
-    end.
-
--spec check_witness_bad_rssi_centrality(Witness :: blockchain_ledger_gateway_v2:gateway_witness(),
-                                        Vars :: map()) -> boolean().
-check_witness_bad_rssi_centrality(Witness, Vars) ->
-    case poc_check_centrality(Vars) of
-        true ->
-            %% - measuring median and mode (for the rssi histogram), checking if it lies within a too-good-to-be-true range, [-40, -80]
-            %% - maybe comparing it to what we think is an ideal range for the central measures, [-100, -130]
-            %% - another "tiebreaker" check looking at bad rssi count cuz we have several false positives
-
-            try
-                blockchain_ledger_gateway_v2:witness_hist(Witness)
-            of
-                Hist ->
-                    %% TODO: Maybe these can just be constants instead of vars?
-                    GoodBucketLow = poc_good_bucket_low(Vars),
-                    GoodBucketHigh = poc_good_bucket_high(Vars),
-
-                    {GoodBucket, BadBucket} = lists:foldl(fun({Bucket, Val}, {GoodAcc, BadAcc}) ->
-                                                                  case lists:member(Bucket, lists:seq(GoodBucketLow, GoodBucketHigh)) of
-                                                                      true ->
-                                                                          maps:put(Bucket, Val, GoodAcc);
-                                                                      false ->
-                                                                          maps:put(Bucket, Val, BadAcc)
-                                                                  end
-                                                          end,
-                                                          {#{}, #{}},
-                                                          maps:to_list(Hist)),
-
-                    GoodBucketValues = maps:values(GoodBucket),
-                    BadBucketValues = maps:values(BadBucket),
-                    MaxGood = lists:max(GoodBucketValues),
-                    MaxBad = lists:max(BadBucketValues),
-
-                    %% TODO: Normalization
-                    MeanGood = lists:sum(GoodBucketValues) / maps:size(GoodBucket),
-                    MeanBad = lists:sum(BadBucketValues) / maps:size(BadBucket),
-
-                    MaxMetric = MaxBad / MaxGood,
-                    MeanMetric = MeanBad / MeanGood,
-
-                    case {MaxMetric, MeanMetric} of
-                        %% TODO: Check more conditions?
-                        {M1, M2} when M1 >= 1.0 orelse M2 >= 1.0 ->
-                            %% One of the "bad" metric dominate, exclude
-                            false;
-                        _ ->
-                            true
-                    end
-            catch
-                error:no_histogram ->
-                    false
             end;
         _ ->
             true
@@ -460,18 +403,6 @@ poc_version(Vars) ->
 -spec challenge_age(Vars :: map()) -> pos_integer().
 challenge_age(Vars) ->
     maps:get(poc_v4_target_challenge_age, Vars).
-
--spec poc_check_centrality(Vars :: map()) -> boolean().
-poc_check_centrality(Vars) ->
-    maps:get(poc_check_centrality, Vars).
-
--spec poc_good_bucket_low(Vars :: map()) -> integer().
-poc_good_bucket_low(Vars) ->
-    maps:get(poc_good_bucket_low, Vars).
-
--spec poc_good_bucket_high(Vars :: map()) -> integer().
-poc_good_bucket_high(Vars) ->
-    maps:get(poc_good_bucket_high, Vars).
 
 %% we assume that everything that has made it into build has already
 %% been asserted, and thus the lookup will never fail. This function

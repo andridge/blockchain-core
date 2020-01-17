@@ -22,7 +22,7 @@
  {<<"erl_base58">>,{pkg,<<"erl_base58">>,<<"0.0.1">>},0},
  {<<"erlang_stats">>,
   {git,"https://github.com/helium/erlang-stats.git",
-       {ref,"c37a5198ddd0e82215481e7bff378ab9c297fdb8"}},
+       {ref,"6ce4a53ebe3774d3ccd9cd3ed8659489fd08331d"}},
   0},
  {<<"getopt">>,{pkg,<<"getopt">>,<<"1.0.1">>},2},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},

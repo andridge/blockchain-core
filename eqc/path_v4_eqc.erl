@@ -153,7 +153,20 @@ targeting_vars() ->
       poc_v4_target_exclusion_cells => 6000,
       poc_v4_target_score_curve => 2,
       poc_target_hex_parent_res => 5,
-      poc_version => 7
+
+      %% overwrite poc version
+      poc_version => 8
+
+      %% additional rssi bucket range vars
+      poc_good_bucket_low => -140,
+      poc_good_bucket_high => -90
+
+      %% overwrite poc next hop weights
+      poc_v4_prob_rssi_wt => 0.1,
+      poc_v4_prob_time_wt => 0.1,
+      poc_v4_randomness_wt => 0.2,
+      poc_v4_prob_count_wt => 0.1,
+      poc_centrality_wt => 0.5
      }.
 
 default_vars() ->
@@ -167,6 +180,5 @@ default_vars() ->
       poc_v4_prob_time_wt => 0.3,
       poc_v4_randomness_wt => 0.1,
       poc_target_hex_parent_res => 5,
-      poc_version => 8,
-      poc_good_bucket_low => -140,
-      poc_good_bucket_high => -90}.
+      poc_version => 8
+     }.

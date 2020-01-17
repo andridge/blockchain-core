@@ -155,11 +155,11 @@ targeting_vars() ->
       poc_target_hex_parent_res => 5,
 
       %% overwrite poc version
-      poc_version => 8
+      poc_version => 8,
 
       %% additional rssi bucket range vars
       poc_good_bucket_low => -140,
-      poc_good_bucket_high => -90
+      poc_good_bucket_high => -90,
 
       %% overwrite poc next hop weights
       poc_v4_prob_rssi_wt => 0.1,

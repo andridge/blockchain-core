@@ -215,6 +215,8 @@ icdf_select(PopulationList, Rnd) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
+icdf_select([{Node, 0.0}], _Rnd, _OrigRnd) ->
+    {error, zero_weight};
 icdf_select([{Node, _Weight}], _Rnd, _OrigRnd) ->
     {ok, Node};
 icdf_select([{Node, Weight} | _], Rnd, _OrigRnd) when Rnd - Weight =< 0 ->

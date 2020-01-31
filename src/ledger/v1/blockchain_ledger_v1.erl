@@ -1381,9 +1381,9 @@ pubkey_bins_to_offset(GatewayPubkeyBins) ->
                                    GatewayOffsets :: gateway_offsets()) -> gateway_offsets().
 filtered_gateways_to_refresh(Hash, RefreshInterval, GatewayOffsets) ->
     RandState = blockchain_utils:rand_state(Hash),
-    %% XXX: Technically using rand:uniform(x), x >= 5000 would be ideal here,
-    %% unsure if RandState yields the same results.
-    {RandVal, _NewRandState} = rand:uniform_s(RandState),
+    %% NOTE: I believe this ensure that the random number gets seeded with a value
+    %% higher than the RefreshInterval
+    {RandVal, _NewRandState} = rand:uniform_s(2*RefreshInterval, RandState),
     lists:filter(fun({Offset, _PubkeyBin}) ->
                          ((Offset + RandVal) rem RefreshInterval) == 0
                  end,

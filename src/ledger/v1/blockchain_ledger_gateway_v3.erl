@@ -26,7 +26,8 @@
     clear_witnesses/1,
     remove_witness/2,
     witnesses/1,
-    witness_hist/1, witness_recent_time/1, witness_first_time/1
+    witness_hist/1, witness_recent_time/1, witness_first_time/1,
+    convert/1
 ]).
 
 -import(blockchain_utils, [normalize_float/1]).
@@ -541,5 +542,17 @@ fake_config() ->
                         {ok, 100000}
                 end),
     Pid.
+
+convert_v1_to_v3_test() ->
+    GwV1 = blockchain_ledger_gateway_v1:new(<<"owner_address">>, 12),
+    GwV3 = ?MODULE:convert(GwV1),
+    ?assertEqual(#{}, ?MODULE:witnesses(GwV3)),
+    ok.
+
+convert_v2_to_v3_test() ->
+    GwV2 = blockchain_ledger_gateway_v2:new(<<"owner_address">>, 12),
+    GwV3 = ?MODULE:convert(GwV2),
+    ?assertEqual(#{}, ?MODULE:witnesses(GwV3)),
+    ok.
 
 -endif.

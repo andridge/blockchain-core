@@ -399,24 +399,24 @@ witness_first_time(Witness) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Version 2
+%% Version 3
 %% @end
 %%--------------------------------------------------------------------
 -spec serialize(Gateway :: gateway()) -> binary().
 serialize(Gw) ->
     BinGw = erlang:term_to_binary(Gw),
-    <<2, BinGw/binary>>.
+    <<3, BinGw/binary>>.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
 -spec deserialize(binary()) -> gateway().
-deserialize(<<1, Bin/binary>>) ->
-    V1 = erlang:binary_to_term(Bin),
-    convert(V1);
-deserialize(<<2, Bin/binary>>) ->
-    erlang:binary_to_term(Bin).
+deserialize(<<3, Bin/binary>>) ->
+    erlang:binary_to_term(Bin);
+deserialize(Bin) ->
+    %% gateway_v2 handles deserialization of v2 and v1 gateways
+    convert(blockchain_ledger_gateway_v2:deserialize(Bin)).
 
 %% OK to include here, v1 and v2 should now be immutable.
 -record(gateway_v2, {
@@ -433,7 +433,8 @@ deserialize(<<2, Bin/binary>>) ->
     witnesses = #{} ::  blockchain_ledger_gateway_v2:witnesses()
 }).
 
-%% XXX: confirm size of gateway_v1 tuple (record)
+-spec convert(blockchain_ledger_gateway_v2:gateway() |
+              blockchain_ledger_gateway_v1:gateway()) -> ?MODULE:gateway().
 convert(GWv1) when is_record(GWv1, gateway_v1, 10) ->
     ?MODULE:convert(blockchain_ledger_gateway_v2:convert(GWv1));
 convert(#gateway_v2{
